@@ -425,7 +425,8 @@ open class NavigationMapView: MGLMapView, UIGestureRecognizerDelegate {
         removeWaypoints()
         
         show(routes)
-        showWaypoints(on: active)
+        //MBLTY: we don't want to show the waypoint shape because we're already added the marker for the destination
+        //showWaypoints(on: active)
         
         fit(to: active, facing: 0, animated: animated)
     }
@@ -465,7 +466,8 @@ open class NavigationMapView: MGLMapView, UIGestureRecognizerDelegate {
             style.addSource(lineCasingSource)
             
             let line = navigationMapViewDelegate?.navigationMapView(self, routeStyleLayerWithIdentifier: StyleLayerIdentifier.route, source: lineSource) ?? routeStyleLayer(identifier: StyleLayerIdentifier.route, source: lineSource)
-            let lineCasing = navigationMapViewDelegate?.navigationMapView(self, routeCasingStyleLayerWithIdentifier: StyleLayerIdentifier.routeCasing, source: lineCasingSource) ?? routeCasingStyleLayer(identifier: StyleLayerIdentifier.routeCasing, source: lineSource)
+            //MBLTY changed lineCasingSource to lineSource for the delegate call otherwise wrong line gets rendered on the map
+            let lineCasing = navigationMapViewDelegate?.navigationMapView(self, routeCasingStyleLayerWithIdentifier: StyleLayerIdentifier.routeCasing, source: lineSource /*lineCasingSource*/) ?? routeCasingStyleLayer(identifier: StyleLayerIdentifier.routeCasing, source: lineSource)
             
             for layer in style.layers.reversed() {
                 if !(layer is MGLSymbolStyleLayer) &&
@@ -507,7 +509,7 @@ open class NavigationMapView: MGLMapView, UIGestureRecognizerDelegate {
         let waypoints: [Waypoint] = Array(route.legs.dropLast().compactMap { $0.destination })
         
         let source = navigationMapViewDelegate?.navigationMapView(self, shapeFor: waypoints, legIndex: legIndex) ?? shape(for: waypoints, legIndex: legIndex)
-        if route.legs.count > 1 { //are we on a multipoint route?
+        if route.routeOptions.waypoints.count > 2 { //are we on a multipoint route?
             
             routes = [route] //update the model
             if let waypointSource = style.source(withIdentifier: SourceIdentifier.waypoint) as? MGLShapeSource {
@@ -533,6 +535,7 @@ open class NavigationMapView: MGLMapView, UIGestureRecognizerDelegate {
             removeAnnotations(annotationsToRemove() ?? [])
             let destination = NavigationAnnotation()
             destination.coordinate = destinationCoordinate
+            
             addAnnotation(destination)
         }
     }
@@ -709,11 +712,9 @@ open class NavigationMapView: MGLMapView, UIGestureRecognizerDelegate {
     //TODO: Change to point-based distance calculation
     private func waypoints(on routes: [Route], closeTo point: CGPoint) -> [Waypoint]? {
         let tapCoordinate = convert(point, toCoordinateFrom: self)
-        let multipointRoutes = routes.filter { $0.legs.count > 1}
+        let multipointRoutes = routes.filter { $0.routeOptions.waypoints.count >= 3}
         guard multipointRoutes.count > 0 else { return nil }
-        let waypoints = multipointRoutes.compactMap { route in
-            route.legs.dropLast().compactMap { $0.destination }
-        }.flatMap {$0}
+        let waypoints = multipointRoutes.flatMap({$0.routeOptions.waypoints})
         
         //lets sort the array in order of closest to tap
         let closest = waypoints.sorted { (left, right) -> Bool in
